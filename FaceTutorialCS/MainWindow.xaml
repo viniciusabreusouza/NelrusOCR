@@ -4,7 +4,7 @@
          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
          Title="MainWindow" Height="700" Width="960">
     <Grid x:Name="BackPanel">
-        <Image x:Name="FacePhoto" Stretch="Uniform" Margin="0,0,0,50" MouseMove="FacePhoto_MouseMove" />
+        <Image x:Name="FacePhoto" Stretch="Uniform" Margin="0,0,0,50"/>
         <DockPanel DockPanel.Dock="Bottom">
             <Button x:Name="BrowseButton" Width="72" Height="20" VerticalAlignment="Bottom" HorizontalAlignment="Left"
                      Content="Browse..."
@@ -14,6 +14,7 @@
                     <TextBlock Name="faceDescriptionStatusBar" />
                 </StatusBarItem>
             </StatusBar>
+            <Label Content="NELRUS OCR" Height="669" VerticalAlignment="Top"/>
         </DockPanel>
     </Grid>
 </Window>

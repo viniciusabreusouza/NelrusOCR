@@ -1,10 +1,14 @@
 // <snippet_using>
 using Microsoft.Azure.CognitiveServices.Vision.Face;
 using Microsoft.Azure.CognitiveServices.Vision.Face.Models;
-
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -17,47 +21,18 @@ namespace FaceTutorial
 {
     public partial class MainWindow : Window
     {
-        // <snippet_mainwindow_fields>
-        // Add your Face subscription key to your environment variables.
-        private static string subscriptionKey = "d6b52cd840894fef9958efb9ff7f32c8";
-        // Add your Face endpoint to your environment variables.
-        private static string faceEndpoint = "https://nelrusface.cognitiveservices.azure.com";
+        private static string subscriptionKey = "b9c29eabf9f54b128af66ba6ee3aa2c3";
+        private static string endpoint = "https://nelrusocr.cognitiveservices.azure.com/";
 
-        private readonly IFaceClient faceClient = new FaceClient(
-            new ApiKeyServiceClientCredentials(subscriptionKey),
-            new System.Net.Http.DelegatingHandler[] { });
+        // the Batch Read method endpoint
+        static string uriBase = endpoint + "/vision/v3.0/read/analyze";
 
-        // The list of detected faces.
-        private IList<DetectedFace> faceList;
-        // The list of descriptions for the detected faces.
-        private string[] faceDescriptions;
-        // The resize factor for the displayed image.
-        private double resizeFactor;
-
-        private const string defaultStatusBarText =
-            "Place the mouse pointer over a face to see the face description.";
-        // </snippet_mainwindow_fields>
-
-        // <snippet_mainwindow_constructor>
         public MainWindow()
         {
             InitializeComponent();
 
-            if (Uri.IsWellFormedUriString(faceEndpoint, UriKind.Absolute))
-            {
-                faceClient.Endpoint = faceEndpoint;
-            }
-            else
-            {
-                MessageBox.Show(faceEndpoint,
-                    "Invalid URI", MessageBoxButton.OK, MessageBoxImage.Error);
-                Environment.Exit(0);
-            }
         }
-        // </snippet_mainwindow_constructor>
 
-        // <snippet_browsebuttonclick_start>
-        // Displays the image and calls UploadAndDetectFaces.
         private async void BrowseButton_Click(object sender, RoutedEventArgs e)
         {
             // Get the image file to scan from the user.
@@ -84,217 +59,207 @@ namespace FaceTutorial
             bitmapSource.EndInit();
 
             FacePhoto.Source = bitmapSource;
-            // </snippet_browsebuttonclick_start>
 
-            // <snippet_browsebuttonclick_mid>
-            // Detect any faces in the image.
-            Title = "Detecting...";
-            faceList = await UploadAndDetectFaces(filePath);
-            Title = String.Format(
-                "Detection Finished. {0} face(s) detected", faceList.Count);
+            Title = "NELRUS OCR";
 
-            if (faceList.Count > 0)
-            {
-                // Prepare to draw rectangles around the faces.
-                DrawingVisual visual = new DrawingVisual();
-                DrawingContext drawingContext = visual.RenderOpen();
-                drawingContext.DrawImage(bitmapSource,
-                    new Rect(0, 0, bitmapSource.Width, bitmapSource.Height));
-                double dpi = bitmapSource.DpiX;
-                // Some images don't contain dpi info.
-                resizeFactor = (dpi == 0) ? 1 : 96 / dpi;
-                faceDescriptions = new String[faceList.Count];
-
-                for (int i = 0; i < faceList.Count; ++i)
-                {
-                    DetectedFace face = faceList[i];
-
-                    // Draw a rectangle on the face.
-                    drawingContext.DrawRectangle(
-                        Brushes.Transparent,
-                        new Pen(Brushes.Red, 2),
-                        new Rect(
-                            face.FaceRectangle.Left * resizeFactor,
-                            face.FaceRectangle.Top * resizeFactor,
-                            face.FaceRectangle.Width * resizeFactor,
-                            face.FaceRectangle.Height * resizeFactor
-                            )
-                    );
-
-                    // Store the face description.
-                    faceDescriptions[i] = FaceDescription(face);
-                }
-
-                drawingContext.Close();
-
-                // Display the image with the rectangle around the face.
-                RenderTargetBitmap faceWithRectBitmap = new RenderTargetBitmap(
-                    (int)(bitmapSource.PixelWidth * resizeFactor),
-                    (int)(bitmapSource.PixelHeight * resizeFactor),
-                    96,
-                    96,
-                    PixelFormats.Pbgra32);
-
-                faceWithRectBitmap.Render(visual);
-                FacePhoto.Source = faceWithRectBitmap;
-
-                // Set the status bar text.
-                faceDescriptionStatusBar.Text = defaultStatusBarText;
-            }
-            // </snippet_browsebuttonclick_mid>
-        // <snippet_browsebuttonclick_end>
+            await ReadText(filePath);
         }
-        // </snippet_browsebuttonclick_end>
 
-        // <snippet_mousemove_start>
-        // Displays the face description when the mouse is over a face rectangle.
-        private void FacePhoto_MouseMove(object sender, MouseEventArgs e)
+
+        /// <summary>
+        /// Gets the text from the specified image file by using
+        /// the Computer Vision REST API.
+        /// </summary>
+        /// <param name="imageFilePath">The image file with text.</param>
+        static async Task ReadText(string imageFilePath)
         {
-            // </snippet_mousemove_start>
-
-            // <snippet_mousemove_mid>
-            // If the REST call has not completed, return.
-            if (faceList == null)
-                return;
-
-            // Find the mouse position relative to the image.
-            Point mouseXY = e.GetPosition(FacePhoto);
-
-            ImageSource imageSource = FacePhoto.Source;
-            BitmapSource bitmapSource = (BitmapSource)imageSource;
-
-            // Scale adjustment between the actual size and displayed size.
-            var scale = FacePhoto.ActualWidth / (bitmapSource.PixelWidth / resizeFactor);
-
-            // Check if this mouse position is over a face rectangle.
-            bool mouseOverFace = false;
-
-            for (int i = 0; i < faceList.Count; ++i)
-            {
-                FaceRectangle fr = faceList[i].FaceRectangle;
-                double left = fr.Left * scale;
-                double top = fr.Top * scale;
-                double width = fr.Width * scale;
-                double height = fr.Height * scale;
-
-                // Display the face description if the mouse is over this face rectangle.
-                if (mouseXY.X >= left && mouseXY.X <= left + width &&
-                    mouseXY.Y >= top && mouseXY.Y <= top + height)
-                {
-                    faceDescriptionStatusBar.Text = faceDescriptions[i];
-                    mouseOverFace = true;
-                    break;
-                }
-            }
-
-            // String to display when the mouse is not over a face rectangle.
-            if (!mouseOverFace) faceDescriptionStatusBar.Text = defaultStatusBarText;
-            // </snippet_mousemove_mid>
-        // <snippet_mousemove_end>
-        }
-        // </snippet_mousemove_end>
-
-        // <snippet_uploaddetect>
-        // Uploads the image file and calls DetectWithStreamAsync.
-        private async Task<IList<DetectedFace>> UploadAndDetectFaces(string imageFilePath)
-        {
-            // The list of Face attributes to return.
-            IList<FaceAttributeType?> faceAttributes =
-                new FaceAttributeType?[]
-                {
-                    FaceAttributeType.Gender, FaceAttributeType.Age,
-                    FaceAttributeType.Smile, FaceAttributeType.Emotion,
-                    FaceAttributeType.Glasses, FaceAttributeType.Hair
-                };
-
-            // Call the Face API.
             try
             {
-                using (Stream imageFileStream = File.OpenRead(imageFilePath))
+                HttpClient client = new HttpClient();
+
+                // Request headers.
+                client.DefaultRequestHeaders.Add(
+                    "Ocp-Apim-Subscription-Key", subscriptionKey);
+
+                string url = uriBase;
+
+                HttpResponseMessage response;
+
+                // Two REST API methods are required to extract text.
+                // One method to submit the image for processing, the other method
+                // to retrieve the text found in the image.
+
+                // operationLocation stores the URI of the second REST API method,
+                // returned by the first REST API method.
+                string operationLocation;
+
+                // Reads the contents of the specified local image
+                // into a byte array.
+                byte[] byteData = GetImageAsByteArray(imageFilePath);
+
+                // Adds the byte array as an octet stream to the request body.
+                using (ByteArrayContent content = new ByteArrayContent(byteData))
                 {
-                    // The second argument specifies to return the faceId, while
-                    // the third argument specifies not to return face landmarks.
-                    IList<DetectedFace> faceList =
-                        await faceClient.Face.DetectWithStreamAsync(
-                            imageFileStream, true, false, faceAttributes);
-                    return faceList;
+                    // This example uses the "application/octet-stream" content type.
+                    // The other content types you can use are "application/json"
+                    // and "multipart/form-data".
+                    content.Headers.ContentType =
+                        new MediaTypeHeaderValue("application/octet-stream");
+
+                    // The first REST API method, Batch Read, starts
+                    // the async process to analyze the written text in the image.
+                    response = await client.PostAsync(url, content);
                 }
+
+                // The response header for the Batch Read method contains the URI
+                // of the second method, Read Operation Result, which
+                // returns the results of the process in the response body.
+                // The Batch Read operation does not return anything in the response body.
+                if (response.IsSuccessStatusCode)
+                    operationLocation =
+                        response.Headers.GetValues("Operation-Location").FirstOrDefault();
+                else
+                {
+                    // Display the JSON error data.
+                    string errorString = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine("\n\nResponse:\n{0}\n",
+                        JToken.Parse(errorString).ToString());
+                    return;
+                }
+
+                // If the first REST API method completes successfully, the second 
+                // REST API method retrieves the text written in the image.
+                //
+                // Note: The response may not be immediately available. Text
+                // recognition is an asynchronous operation that can take a variable
+                // amount of time depending on the length of the text.
+                // You may need to wait or retry this operation.
+                //
+                // This example checks once per second for ten seconds.
+                string contentString;
+                int i = 0;
+                do
+                {
+                    System.Threading.Thread.Sleep(1000);
+                    response = await client.GetAsync(operationLocation);
+                    contentString = await response.Content.ReadAsStringAsync();
+                    ++i;
+                }
+                while (i < 60 && contentString.IndexOf("\"status\":\"succeeded\"") == -1);
+
+                if (i == 60 && contentString.IndexOf("\"status\":\"succeeded\"") == -1)
+                {
+                    Console.WriteLine("\nTimeout error.\n");
+                    return;
+                }
+
+
+                var result = JsonConvert.DeserializeObject<Root>(contentString);
+
+
+                string resultString = "Result: \n";
+
+                foreach (var item in result.analyzeResult.readResults)
+                {
+                    if (item != null)
+                    {
+                        //foreach (var lines in item.lines)
+                        //{
+
+                        //    resultString += "\n" + lines.text;
+                        //}
+
+                        for (int y = 0; y < item.lines.Count(); y++)
+                        {
+                            if (item.lines[y].text.ToString().Contains("NOME"))
+                            {
+                                resultString += "\n Nome: " + item.lines[y + 1].text;
+                            }
+                            if (item.lines[y].text.ToString().Contains("DOC.IDENTIDADE / ORG.EMISSOR UF"))
+                            {
+                                resultString += "\n Identidade + Orgão Emissor: " + item.lines[y + 1].text + " - " + item.lines[y + 2].text;
+                            }
+                            if (item.lines[y].text.ToString().Contains("CPF"))
+                            {
+                                resultString += "\n CPF: " + item.lines[y + 2].text;
+                            }
+                            if (item.lines[y].text.ToString().Contains("FILIAÇÃO"))
+                            {
+                                resultString += "\n Filiação: " + item.lines[y + 1].text + " e " + item.lines[y + 2].text;
+                            }
+                            if (item.lines[y].text.ToString().Contains("Nº REGISTRO"))
+                            {
+                                resultString += "\n Nº Registro: " + item.lines[y + 3].text;
+                            }
+                        }
+                    }
+                }
+
+
+                MessageBox.Show(resultString, "Result");
             }
-            // Catch and display Face API errors.
-            catch (APIErrorException f)
-            {
-                MessageBox.Show(f.Message);
-                return new List<DetectedFace>();
-            }
-            // Catch and display all other errors.
             catch (Exception e)
             {
                 MessageBox.Show(e.Message, "Error");
-                return new List<DetectedFace>();
             }
         }
-        // </snippet_uploaddetect>
 
-        // <snippet_facedesc>
-        // Creates a string out of the attributes describing the face.
-        private string FaceDescription(DetectedFace face)
+        /// <summary>
+        /// Returns the contents of the specified file as a byte array.
+        /// </summary>
+        /// <param name="imageFilePath">The image file to read.</param>
+        /// <returns>The byte array of the image data.</returns>
+        static byte[] GetImageAsByteArray(string imageFilePath)
         {
-            StringBuilder sb = new StringBuilder();
-
-            sb.Append("Face: ");
-
-            // Add the gender, age, and smile.
-            sb.Append(face.FaceAttributes.Gender);
-            sb.Append(", ");
-            sb.Append(face.FaceAttributes.Age);
-            sb.Append(", ");
-            sb.Append(String.Format("smile {0:F1}%, ", face.FaceAttributes.Smile * 100));
-
-            // Add the emotions. Display all emotions over 10%.
-            sb.Append("Emotion: ");
-            Emotion emotionScores = face.FaceAttributes.Emotion;
-            if (emotionScores.Anger >= 0.1f) sb.Append(
-                String.Format("anger {0:F1}%, ", emotionScores.Anger * 100));
-            if (emotionScores.Contempt >= 0.1f) sb.Append(
-                String.Format("contempt {0:F1}%, ", emotionScores.Contempt * 100));
-            if (emotionScores.Disgust >= 0.1f) sb.Append(
-                String.Format("disgust {0:F1}%, ", emotionScores.Disgust * 100));
-            if (emotionScores.Fear >= 0.1f) sb.Append(
-                String.Format("fear {0:F1}%, ", emotionScores.Fear * 100));
-            if (emotionScores.Happiness >= 0.1f) sb.Append(
-                String.Format("happiness {0:F1}%, ", emotionScores.Happiness * 100));
-            if (emotionScores.Neutral >= 0.1f) sb.Append(
-                String.Format("neutral {0:F1}%, ", emotionScores.Neutral * 100));
-            if (emotionScores.Sadness >= 0.1f) sb.Append(
-                String.Format("sadness {0:F1}%, ", emotionScores.Sadness * 100));
-            if (emotionScores.Surprise >= 0.1f) sb.Append(
-                String.Format("surprise {0:F1}%, ", emotionScores.Surprise * 100));
-
-            // Add glasses.
-            sb.Append(face.FaceAttributes.Glasses);
-            sb.Append(", ");
-
-            // Add hair.
-            sb.Append("Hair: ");
-
-            // Display baldness confidence if over 1%.
-            if (face.FaceAttributes.Hair.Bald >= 0.01f)
-                sb.Append(String.Format("bald {0:F1}% ", face.FaceAttributes.Hair.Bald * 100));
-
-            // Display all hair color attributes over 10%.
-            IList<HairColor> hairColors = face.FaceAttributes.Hair.HairColor;
-            foreach (HairColor hairColor in hairColors)
+            // Open a read-only file stream for the specified file.
+            using (FileStream fileStream =
+                new FileStream(imageFilePath, FileMode.Open, FileAccess.Read))
             {
-                if (hairColor.Confidence >= 0.1f)
-                {
-                    sb.Append(hairColor.Color.ToString());
-                    sb.Append(String.Format(" {0:F1}% ", hairColor.Confidence * 100));
-                }
+                // Read the file's contents into a byte array.
+                BinaryReader binaryReader = new BinaryReader(fileStream);
+                return binaryReader.ReadBytes((int)fileStream.Length);
             }
-
-            // Return the built string.
-            return sb.ToString();
         }
-        // </snippet_facedesc>
+
+
     }
+
+    public class Word
+    {
+        public List<int> boundingBox { get; set; }
+        public string text { get; set; }
+        public double confidence { get; set; }
+    }
+
+    public class Line
+    {
+        public List<int> boundingBox { get; set; }
+        public string text { get; set; }
+        public List<Word> words { get; set; }
+    }
+
+    public class ReadResult
+    {
+        public int page { get; set; }
+        public int angle { get; set; }
+        public int width { get; set; }
+        public int height { get; set; }
+        public string unit { get; set; }
+        public List<Line> lines { get; set; }
+    }
+
+    public class AnalyzeResult
+    {
+        public string version { get; set; }
+        public List<ReadResult> readResults { get; set; }
+    }
+
+    public class Root
+    {
+        public string status { get; set; }
+        public DateTime createdDateTime { get; set; }
+        public DateTime lastUpdatedDateTime { get; set; }
+        public AnalyzeResult analyzeResult { get; set; }
+    }
+
 }

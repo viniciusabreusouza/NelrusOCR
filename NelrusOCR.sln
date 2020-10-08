@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.30523.141
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NelrusFaceTutorial", "FaceTutorialCS\NelrusFaceTutorial.csproj", "{E4D4BF66-7E51-4880-A028-D48A12E2F487}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NelrusOCR", "FaceTutorialCS\NelrusOCR.csproj", "{E4D4BF66-7E51-4880-A028-D48A12E2F487}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
