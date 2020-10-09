@@ -30,7 +30,6 @@ namespace FaceTutorial
         public MainWindow()
         {
             InitializeComponent();
-
         }
 
         private async void BrowseButton_Click(object sender, RoutedEventArgs e)
