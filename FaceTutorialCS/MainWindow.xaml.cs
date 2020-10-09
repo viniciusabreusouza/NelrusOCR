@@ -175,19 +175,19 @@ namespace FaceTutorial
                             {
                                 resultString += "\n Nome: " + item.lines[y + 1].text;
                             }
-                            if (item.lines[y].text.ToString().Contains("DOC.IDENTIDADE / ORG.EMISSOR UF"))
+                            if (item.lines[y].text.ToString().Contains("IDENTIDADE"))
                             {
-                                resultString += "\n Identidade + Orgão Emissor: " + item.lines[y + 1].text + " - " + item.lines[y + 2].text;
+                                resultString += "\n Identidade: " + item.lines[y + 1].text;
                             }
                             if (item.lines[y].text.ToString().Contains("CPF"))
                             {
                                 resultString += "\n CPF: " + item.lines[y + 2].text;
                             }
-                            if (item.lines[y].text.ToString().Contains("FILIAÇÃO"))
+                            if (item.lines[y].text.ToString().Contains("Validade"))
                             {
-                                resultString += "\n Filiação: " + item.lines[y + 1].text + " e " + item.lines[y + 2].text;
+                                resultString += "\n Filiação: " + item.lines[y + 1].text ;
                             }
-                            if (item.lines[y].text.ToString().Contains("Nº REGISTRO"))
+                            if (item.lines[y].text.ToString().Contains("REGISTRO"))
                             {
                                 resultString += "\n Nº Registro: " + item.lines[y + 3].text;
                             }
@@ -241,7 +241,7 @@ namespace FaceTutorial
     public class ReadResult
     {
         public int page { get; set; }
-        public int angle { get; set; }
+        public double angle { get; set; }
         public int width { get; set; }
         public int height { get; set; }
         public string unit { get; set; }
@@ -261,5 +261,6 @@ namespace FaceTutorial
         public DateTime lastUpdatedDateTime { get; set; }
         public AnalyzeResult analyzeResult { get; set; }
     }
+
 
 }
